@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: investment_advisor_db
+    environment:
+      POSTGRES_USER: advisor
+      POSTGRES_PASSWORD: advisor_secret
+      POSTGRES_DB: investment_advisor
+    ports:
+      - "5433:5432"  # Use port 5433 to avoid conflict with local PostgreSQL
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init_pgvector.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U advisor -d investment_advisor"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
