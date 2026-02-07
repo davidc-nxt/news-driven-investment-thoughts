@@ -5,18 +5,20 @@ import typer
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
+from rich.markdown import Markdown
 from sqlalchemy import select, func
 
 from investment_advisor.config import get_settings
 from investment_advisor.db.connection import get_session
 from investment_advisor.db.models import Ticker, Article, Embedding, MarketData
-from investment_advisor.ingestion import NewsFetcher, MarketDataFetcher
+from investment_advisor.ingestion import NewsFetcher, MarketDataFetcher, FinancialDataService
 from investment_advisor.rag import SemanticRetriever
-from investment_advisor.advisor import InvestmentAdvisor
+from investment_advisor.advisor import InvestmentAdvisor, ResearchAgent
+from investment_advisor.analysis import TechnicalAnalyzer
 
 app = typer.Typer(
     name="invest",
-    help="📈 Investment Advisor CLI - RAG-powered financial news analysis",
+    help="📈 Investment Advisor CLI - RAG-powered financial news analysis with deep research",
     add_completion=False,
 )
 console = Console()
@@ -118,6 +120,156 @@ def advise(
         advisor.close()
 
 
+# ─── NEW: Deep Research Command (Dexter-inspired) ─────────────────────
+
+@app.command()
+def research(
+    ticker: str = typer.Argument(..., help="Ticker symbol to research"),
+    query: Optional[str] = typer.Option(None, "--query", "-q", help="Specific research question"),
+):
+    """Deep multi-step financial research (Dexter-inspired).
+
+    Performs autonomous 6-step analysis:
+    1. Company profile
+    2. Key financial metrics
+    3. Financial statements (income, balance, cash flow)
+    4. Technical analysis (RSI, MACD, Bollinger, SMA)
+    5. News context (RAG search)
+    6. Analyst consensus & insider activity
+    """
+    console.print(Panel(
+        f"[bold cyan]🔬 Deep Research: {ticker.upper()}[/bold cyan]\n"
+        "[dim]Multi-step autonomous financial analysis[/dim]",
+        border_style="cyan",
+    ))
+
+    settings = get_settings()
+    if not settings.openrouter_api_key:
+        console.print("[red]Error: OPENROUTER_API_KEY not configured in .env[/red]")
+        raise typer.Exit(1)
+
+    agent = ResearchAgent()
+    try:
+        report = agent.research(ticker, query)
+        console.print(Panel(
+            Markdown(report),
+            title=f"[bold cyan]Research Report: {ticker.upper()}[/bold cyan]",
+            border_style="cyan",
+        ))
+    finally:
+        agent.close()
+
+
+# ─── NEW: Comparison Command ──────────────────────────────────────────
+
+@app.command()
+def compare(
+    tickers: list[str] = typer.Argument(..., help="Ticker symbols to compare (e.g., NVDA AMD)"),
+    query: Optional[str] = typer.Option(None, "--query", "-q", help="Comparison focus"),
+):
+    """Compare multiple tickers side by side.
+
+    Example: invest compare NVDA AMD INTC
+    """
+    if len(tickers) < 2:
+        console.print("[red]Please provide at least 2 tickers to compare[/red]")
+        raise typer.Exit(1)
+
+    symbols = [t.upper() for t in tickers]
+    console.print(Panel(
+        f"[bold cyan]⚖️  Comparing: {' vs '.join(symbols)}[/bold cyan]",
+        border_style="cyan",
+    ))
+
+    settings = get_settings()
+    if not settings.openrouter_api_key:
+        console.print("[red]Error: OPENROUTER_API_KEY not configured in .env[/red]")
+        raise typer.Exit(1)
+
+    agent = ResearchAgent()
+    try:
+        report = agent.compare(symbols, query)
+        console.print(Panel(
+            Markdown(report),
+            title=f"[bold cyan]Comparison: {' vs '.join(symbols)}[/bold cyan]",
+            border_style="cyan",
+        ))
+    finally:
+        agent.close()
+
+
+# ─── NEW: Fundamentals Command ────────────────────────────────────────
+
+@app.command()
+def fundamentals(
+    ticker: str = typer.Argument(..., help="Ticker symbol"),
+    report: str = typer.Option("all", "--report", "-r",
+                               help="Report type: all, income, balance, cashflow, profile, metrics, insider, analyst"),
+    period: str = typer.Option("annual", "--period", "-p", help="Period: annual or quarterly"),
+):
+    """View financial fundamentals for a ticker.
+
+    Reports: all, income, balance, cashflow, profile, metrics, insider, analyst
+    """
+    console.print(Panel(
+        f"[bold cyan]📋 Financial Fundamentals: {ticker.upper()}[/bold cyan]",
+        border_style="cyan",
+    ))
+
+    svc = FinancialDataService()
+
+    reports = [report] if report != "all" else [
+        "profile", "metrics", "income", "balance", "cashflow", "analyst", "insider"
+    ]
+
+    for r in reports:
+        if r == "income":
+            data = svc.get_income_statement(ticker, period=period)
+            svc.display_income_statement(data)
+        elif r == "balance":
+            data = svc.get_balance_sheet(ticker, period=period)
+            svc.display_balance_sheet(data)
+        elif r == "cashflow":
+            data = svc.get_cash_flow(ticker, period=period)
+            svc.display_cash_flow(data)
+        elif r == "profile":
+            data = svc.get_company_profile(ticker)
+            svc.display_company_profile(data)
+        elif r == "metrics":
+            data = svc.get_key_metrics(ticker)
+            svc.display_key_metrics(data)
+        elif r == "insider":
+            data = svc.get_insider_trades(ticker)
+            svc.display_insider_trades(data)
+        elif r == "analyst":
+            data = svc.get_analyst_recommendations(ticker)
+            svc.display_analyst_recommendations(data)
+        else:
+            console.print(f"[yellow]Unknown report type: {r}[/yellow]")
+
+        console.print()  # Spacing between reports
+
+
+# ─── NEW: Technical Analysis Command ──────────────────────────────────
+
+@app.command()
+def technical(
+    ticker: str = typer.Argument(..., help="Ticker symbol to analyze"),
+    period: str = typer.Option("6mo", "--period", "-p", help="Period: 3mo, 6mo, 1y, 2y"),
+):
+    """Run technical analysis with indicators (RSI, MACD, Bollinger, SMA)."""
+    console.print(Panel(
+        f"[bold cyan]📈 Technical Analysis: {ticker.upper()}[/bold cyan]",
+        border_style="cyan",
+    ))
+
+    analyzer = TechnicalAnalyzer()
+    analysis = analyzer.analyze(ticker, period=period)
+    analyzer.display_analysis(analysis)
+
+
+# ─── Existing Commands ────────────────────────────────────────────────
+
 @app.command()
 def tickers(
     action: str = typer.Argument("list", help="Action: list, add, remove"),
@@ -151,8 +303,8 @@ def tickers(
                 if existing:
                     console.print(f"[yellow]{symbol.upper()} already exists[/yellow]")
                 else:
-                    ticker = Ticker(symbol=symbol.upper(), is_active=True)
-                    session.add(ticker)
+                    ticker_obj = Ticker(symbol=symbol.upper(), is_active=True)
+                    session.add(ticker_obj)
                     console.print(f"[green]Added {symbol.upper()}[/green]")
 
             session.commit()
@@ -223,6 +375,22 @@ def status():
         config_table.add_row("OpenRouter Key", "✓ Configured" if settings.openrouter_api_key else "✗ Not set")
 
         console.print(config_table)
+
+        # Available commands overview
+        console.print(Panel(
+            "[bold]Available Commands:[/bold]\n"
+            "  invest fetch -t TICKER    Fetch news & market data\n"
+            "  invest search 'query'     Semantic search (pgvector)\n"
+            "  invest advise TICKER      Quick AI advice\n"
+            "  invest research TICKER    [cyan]Deep multi-step analysis[/cyan]\n"
+            "  invest compare A B        [cyan]Side-by-side comparison[/cyan]\n"
+            "  invest fundamentals TICKER [cyan]Financial statements[/cyan]\n"
+            "  invest technical TICKER   [cyan]Technical indicators[/cyan]\n"
+            "  invest tickers list       Manage tickers\n"
+            "  invest status             This screen",
+            title="[bold green]Quick Reference[/bold green]",
+            border_style="green",
+        ))
 
     finally:
         session.close()

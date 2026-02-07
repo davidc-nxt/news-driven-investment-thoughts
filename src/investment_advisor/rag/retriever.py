@@ -225,6 +225,39 @@ class SemanticRetriever:
 
         return "\n\n".join(context_parts)
 
+    def get_context_for_ticker(self, ticker: str, query: str, top_k: int = 5) -> str:
+        """
+        Get formatted text context from RAG search for a specific ticker.
+
+        Used by the ResearchAgent to gather news context.
+        Gracefully handles database connection errors.
+
+        Args:
+            ticker: Stock ticker symbol
+            query: Search query
+            top_k: Number of results
+
+        Returns:
+            Formatted text context or fallback message
+        """
+        try:
+            results = self.search(query, ticker=ticker, top_k=top_k)
+            if not results:
+                return "No indexed news articles found. Run 'invest fetch' to ingest news first."
+
+            parts = []
+            for i, r in enumerate(results, 1):
+                metadata = r.get("metadata", {})
+                source = metadata.get("source", "Unknown")
+                date = metadata.get("published_at", "N/A")
+                score = r.get("score", 0)
+                parts.append(f"[{i}] ({source}, {date}, relevance: {score:.2f}): {r['text']}")
+
+            return "\n\n".join(parts)
+        except Exception as e:
+            return f"RAG search unavailable (database may not be running): {str(e)}"
+
     def close(self):
         """Close database session."""
         self.session.close()
+

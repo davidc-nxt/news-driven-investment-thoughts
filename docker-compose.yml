@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: advisor_secret
       POSTGRES_DB: investment_advisor
     ports:
-      - "5433:5432"  # Use port 5433 to avoid conflict with local PostgreSQL
+      - "5434:5432"  # Use port 5434 to avoid conflict with other PostgreSQL instances
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./init_pgvector.sql:/docker-entrypoint-initdb.d/init.sql
